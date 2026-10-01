@@ -2,7 +2,7 @@ package Cliente;
 
 import Cliente.Almacenamiento.GestorFicheros;
 
-import Cliente.criptografia.CifradorBasico;
+import Cliente.criptografia.CifradorAES;
 import Cliente.criptografia.HashUtils;
 import Cliente.criptografia.CifradoRSA;
 import java.security.KeyPair;
@@ -19,7 +19,7 @@ public class Main {
             byte[] clave16Bytes = new byte[16];
             new SecureRandom().nextBytes(clave16Bytes);
 
-            byte[] criptograma = CifradorBasico.cifrar(datosEnClaro, clave16Bytes);
+            byte[] criptograma = CifradorAES.cifrar(datosEnClaro, clave16Bytes);
 
             System.out.println("--- 1. PROCESO DE ARCHIVO (AES) ---");
             System.out.println("Clave AES Original (Base64): " + Base64.getEncoder().encodeToString(clave16Bytes));
@@ -62,7 +62,7 @@ public class Main {
 
             // D) Ciframos la Clave Privada RSA usando el AES de tu compañero y la clave del
             // password
-            byte[] clavePrivadaCifrada = CifradorBasico.cifrar(clavePrivadaEnBytes, claveAESDesdePassword);
+            byte[] clavePrivadaCifrada = CifradorAES.cifrar(clavePrivadaEnBytes, claveAESDesdePassword);
             System.out.println(
                     "Clave Privada RSA Cifrada (Base64): " + Base64.getEncoder().encodeToString(clavePrivadaCifrada));
 
