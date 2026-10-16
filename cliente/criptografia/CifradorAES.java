@@ -81,42 +81,47 @@ public class CifradorAES {
     }
 
     // ------------------------------------------------------------------
-    // Cifrado de archivos por flujo (streaming): válido para vídeos de GB
-    // sin cargarlos enteros en memoria.
+    // Cifrado por flujo (streaming) desacoplado de la persistencia
     // ------------------------------------------------------------------
 
-    /** Cifra 'origen' y escribe IV || C en 'destino'. */
-    public static void cifrarArchivo(Path origen, Path destino, byte[] clave16Bytes)
+    /** 
+     * Lee datos en claro de 'in', genera un IV, y escribe IV || Cifrado en 'out'.
+     * Los flujos no se cierran aquí (lo hace quien llama).
+     */
+    public static void cifrarFlujo(InputStream in, OutputStream out, byte[] clave16Bytes)
             throws GeneralSecurityException, IOException {
         comprobarClave(clave16Bytes);
         byte[] iv = generarIV();
         Cipher cipher = crearCipher(Cipher.ENCRYPT_MODE, clave16Bytes, iv);
 
-        try (InputStream in = Files.newInputStream(origen);
-             OutputStream out = new BufferedOutputStream(Files.newOutputStream(destino), TAM_BUFFER)) {
-            out.write(iv); // el IV va en claro al principio: se necesita para descifrar
-            CipherOutputStream cos = new CipherOutputStream(out, cipher);
+        out.write(iv); // el IV va en claro al principio
+        
+        // Usamos BufferedOutputStream solo para mejorar el rendimiento de escritura
+        try (CipherOutputStream cos = new CipherOutputStream(new BufferedOutputStream(out, TAM_BUFFER), cipher)) {
             copiar(in, cos);
-            cos.close();   // ejecuta doFinal() y cierra 'out'
+            // Al cerrarse el bloque try-with-resources, cos.close() se ejecuta,
+            // lo que fuerza el doFinal() del Cipher y hace un flush.
         }
     }
 
-    /** Lee IV || C de 'origen' y escribe el archivo original en 'destino'. */
-    public static void descifrarArchivo(Path origen, Path destino, byte[] clave16Bytes)
+    /** 
+     * Lee IV || Cifrado de 'in', lo descifra y escribe en claro en 'out'.
+     * Los flujos no se cierran aquí.
+     */
+    public static void descifrarFlujo(InputStream in, OutputStream out, byte[] clave16Bytes)
             throws GeneralSecurityException, IOException {
         comprobarClave(clave16Bytes);
 
-        try (InputStream in = Files.newInputStream(origen)) {
-            byte[] iv = in.readNBytes(TAM_IV);
-            if (iv.length != TAM_IV) {
-                throw new GeneralSecurityException("Archivo cifrado corrupto: no contiene IV completo");
-            }
-            Cipher cipher = crearCipher(Cipher.DECRYPT_MODE, clave16Bytes, iv);
+        byte[] iv = in.readNBytes(TAM_IV);
+        if (iv.length != TAM_IV) {
+            throw new GeneralSecurityException("Flujo cifrado corrupto: no contiene IV completo");
+        }
+        Cipher cipher = crearCipher(Cipher.DECRYPT_MODE, clave16Bytes, iv);
 
-            try (CipherInputStream cis = new CipherInputStream(in, cipher);
-                 OutputStream out = new BufferedOutputStream(Files.newOutputStream(destino), TAM_BUFFER)) {
-                copiar(cis, out);
-            }
+        try (CipherInputStream cis = new CipherInputStream(in, cipher);
+             OutputStream bout = new BufferedOutputStream(out, TAM_BUFFER)) {
+            copiar(cis, bout);
+            bout.flush();
         }
     }
 

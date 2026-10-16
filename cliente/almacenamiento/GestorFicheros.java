@@ -1,10 +1,14 @@
 package cliente.almacenamiento;
 
+import cliente.codificacion.Codificador;
+import cliente.codificacion.CodificadorBase64;
+
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Base64;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -12,14 +16,20 @@ import java.util.stream.Stream;
  * Gestiona dónde se guardan las cosas en disco.
  *
  * datos/
- *   claves/<usuario>_publica.key   -> PU en claro (X.509)
- *   claves/<usuario>_privada.cif   -> PR protegida (ver ProtectorClavePrivada)
- *   cifrados/<id>.cif              -> archivos multimedia cifrados (IV || C)
+ *   claves/<usuario>_publica.key   -> PU en claro (X.509) codificada en Base64
+ *   claves/<usuario>_privada.cif   -> PR protegida (ver ProtectorClavePrivada) codificada en Base64
+ *   cifrados/<id>.cif              -> archivos multimedia cifrados (IV || C) codificados en Base64
  *   cifrados/<id>.meta             -> metadatos: usuario, nombreOriginal, K* en Base64
  */
 public class GestorFicheros {
 
     private static Path directorioDatos = Paths.get("datos");
+    
+    // Inyectamos la dependencia de codificación.
+    // Esto es clave para el desacoplamiento: si en la Fase 2 quieres cambiar
+    // a otra codificación, o eliminarla localmente para que la haga el servidor, 
+    // solo cambias esta línea (por ejemplo a un 'CodificadorNulo').
+    private static final Codificador codificador = new CodificadorBase64();
 
     public static void setDirectorioDatos(Path dir) {
         directorioDatos = dir;
@@ -42,6 +52,32 @@ public class GestorFicheros {
     }
 
     // ------------------------------------------------------------------
+    // Flujos envueltos (Streams) para Archivos Grandes
+    // ------------------------------------------------------------------
+    
+    /**
+     * Devuelve un flujo de salida para escribir un archivo cifrado.
+     * El flujo ya viene envuelto, por lo que todo lo que se escriba en él
+     * se codificará automáticamente (ej. en Base64) antes de tocar el disco.
+     */
+    public static OutputStream obtenerFlujoSalidaCifrado(String idArchivo) throws IOException {
+        Path ruta = rutaArchivoCifrado(idArchivo);
+        OutputStream outReal = Files.newOutputStream(ruta);
+        return codificador.envolverSalida(outReal);
+    }
+    
+    /**
+     * Devuelve un flujo de entrada para leer un archivo cifrado.
+     * El flujo ya viene envuelto, por lo que al leer, los datos se 
+     * decodificarán automáticamente recuperando los bytes crudos (cifrados).
+     */
+    public static InputStream obtenerFlujoEntradaCifrado(String idArchivo) throws IOException {
+        Path ruta = rutaArchivoCifrado(idArchivo);
+        InputStream inReal = Files.newInputStream(ruta);
+        return codificador.envolverEntrada(inReal);
+    }
+
+    // ------------------------------------------------------------------
     // Metadatos de Archivos (Sustituye a AlmacenClaves y EntradaClave)
     // ------------------------------------------------------------------
 
@@ -49,7 +85,8 @@ public class GestorFicheros {
 
     public static void guardarMetadatosArchivo(String idArchivo, String usuario, String nombreOriginal, byte[] claveCifradaRSA) throws IOException {
         Path rutaMeta = directorioCifrados().resolve(idArchivo + ".meta");
-        String meta = usuario + "\n" + nombreOriginal + "\n" + Base64.getEncoder().encodeToString(claveCifradaRSA);
+        // Usamos la interfaz del codificador en lugar de Base64 directo
+        String meta = usuario + "\n" + nombreOriginal + "\n" + codificador.codificarAString(claveCifradaRSA);
         Files.writeString(rutaMeta, meta);
     }
 
@@ -58,7 +95,8 @@ public class GestorFicheros {
         if (!Files.exists(rutaMeta)) return null;
         List<String> lineas = Files.readAllLines(rutaMeta);
         if (lineas.size() < 3) return null;
-        return new MetadatosArchivo(lineas.get(0), lineas.get(1), Base64.getDecoder().decode(lineas.get(2)));
+        // Usamos la interfaz del codificador en lugar de Base64 directo
+        return new MetadatosArchivo(lineas.get(0), lineas.get(1), codificador.decodificarDeString(lineas.get(2)));
     }
 
     public static List<String> listarIdsArchivos() throws IOException {
@@ -75,16 +113,21 @@ public class GestorFicheros {
 
     public static void guardarClavesUsuario(String nombreUsuario, byte[] clavePublica, byte[] clavePrivadaCifrada)
             throws IOException {
-        Files.write(rutaPublica(nombreUsuario), clavePublica);
-        Files.write(rutaPrivada(nombreUsuario), clavePrivadaCifrada);
+        // Codificamos los bytes de las claves antes de guardarlos a disco
+        Files.write(rutaPublica(nombreUsuario), codificador.codificarABytes(clavePublica));
+        Files.write(rutaPrivada(nombreUsuario), codificador.codificarABytes(clavePrivadaCifrada));
     }
 
     public static byte[] leerClavePublica(String nombreUsuario) throws IOException {
-        return Files.readAllBytes(rutaPublica(nombreUsuario));
+        // Leemos del disco y decodificamos para recuperar los bytes originales
+        byte[] leido = Files.readAllBytes(rutaPublica(nombreUsuario));
+        return codificador.decodificarDeBytes(leido);
     }
 
     public static byte[] leerClavePrivadaCifrada(String nombreUsuario) throws IOException {
-        return Files.readAllBytes(rutaPrivada(nombreUsuario));
+        // Leemos del disco y decodificamos para recuperar los bytes originales
+        byte[] leido = Files.readAllBytes(rutaPrivada(nombreUsuario));
+        return codificador.decodificarDeBytes(leido);
     }
 
     public static boolean existeUsuario(String nombreUsuario) throws IOException {

@@ -4,7 +4,6 @@ import cliente.almacenamiento.GestorFicheros;
 import cliente.criptografia.CifradoRSA;
 import cliente.criptografia.CifradorAES;
 import cliente.criptografia.ProtectorClavePrivada;
-import cliente.seguridad.DerivadorClaveContrasena;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,7 +15,6 @@ import java.security.PublicKey;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -93,19 +91,31 @@ public class ServicioCifrado {
         PublicKey pu = CifradoRSA.cargarClavePublica(GestorFicheros.leerClavePublica(usuario));
         byte[] k = CifradorAES.generarClaveAES();
         String id = UUID.randomUUID().toString();
-        Path destino = GestorFicheros.rutaArchivoCifrado(id);
+        
+        // Ya no declaramos 'Path destino' aquí para el archivo .cif.
+        // Solo necesitamos el ID para pedirle el flujo a GestorFicheros.
 
         try {
-            CifradorAES.cifrarArchivo(archivo, destino, k);
+            // 1. Abrimos el archivo original para leer
+            try (java.io.InputStream in = Files.newInputStream(archivo);
+                 // 2. Pedimos a GestorFicheros el flujo de salida ya preparado con Base64
+                 java.io.OutputStream outCifrado = GestorFicheros.obtenerFlujoSalidaCifrado(id)) {
+                
+                // 3. CifradorAES procesa el flujo (sin saber que acaba en un archivo Base64)
+                CifradorAES.cifrarFlujo(in, outCifrado, k);
+            }
+
             byte[] kCifrada = CifradoRSA.cifrarClaveAES(k, pu);
             GestorFicheros.guardarMetadatosArchivo(id, usuario, archivo.getFileName().toString(), kCifrada);
             log("  guardado: archivo " + id + ".cif y sus metadatos   [OK]");
+            
         } catch (GeneralSecurityException | IOException ex) {
-            Files.deleteIfExists(destino); 
+            // Si algo falla, limpiamos los archivos a medias usando GestorFicheros
+            Files.deleteIfExists(GestorFicheros.rutaArchivoCifrado(id)); 
             Files.deleteIfExists(GestorFicheros.directorioCifrados().resolve(id + ".meta"));
             throw ex;
         } finally {
-            Arrays.fill(k, (byte) 0);
+            java.util.Arrays.fill(k, (byte) 0);
         }
         return id;
     }
@@ -113,17 +123,6 @@ public class ServicioCifrado {
     // ------------------------------------------------------------------
     // Descifrado
     // ------------------------------------------------------------------
-
-    public Path descifrarArchivo(String usuario, char[] contrasena, String idArchivo, Path carpetaDestino)
-            throws GeneralSecurityException, IOException {
-        
-        GestorFicheros.MetadatosArchivo meta = GestorFicheros.leerMetadatosArchivo(idArchivo);
-        if (meta == null || !meta.usuario().equals(usuario)) {
-            throw new IllegalArgumentException("El usuario no tiene acceso a ese archivo");
-        }
-        PrivateKey pr = obtenerClavePrivada(usuario, contrasena);
-        return descifrarArchivo(usuario, pr, idArchivo, carpetaDestino);
-    }
 
     public Path descifrarArchivo(String usuario, PrivateKey clavePrivada, String idArchivo, Path carpetaDestino)
             throws GeneralSecurityException, IOException {
@@ -139,11 +138,20 @@ public class ServicioCifrado {
         try {
             Files.createDirectories(carpetaDestino);
             Path destino = rutaLibre(carpetaDestino, meta.nombreOriginal());
-            CifradorAES.descifrarArchivo(GestorFicheros.rutaArchivoCifrado(idArchivo), destino, k);
+            
+            // 1. Pedimos a GestorFicheros el flujo de entrada (ya decodificando Base64)
+            try (java.io.InputStream inCifrado = GestorFicheros.obtenerFlujoEntradaCifrado(idArchivo);
+                 // 2. Abrimos el archivo final donde quedará en claro
+                 java.io.OutputStream outClaro = Files.newOutputStream(destino)) {
+                
+                // 3. CifradorAES hace su trabajo sobre los flujos
+                CifradorAES.descifrarFlujo(inCifrado, outClaro, k);
+            }
+            
             log("  Archivo descifrado correctamente   [OK]");
             return destino;
         } finally {
-            Arrays.fill(k, (byte) 0);
+            java.util.Arrays.fill(k, (byte) 0);
         }
     }
 
