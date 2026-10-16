@@ -14,8 +14,7 @@ import java.util.List;
  *
  * Flujo:
  *   1. Ventana de acceso (JOptionPane): usuario + contraseña -> Entrar o Registrarse.
- *   2. Ventana principal: lista de archivos cifrados, botones Cifrar / Descifrar / Cerrar sesión
- *      y una caja de texto con los pasos criptográficos que va haciendo el programa.
+ *   2. Ventana principal: lista de archivos cifrados, botones Cifrar / Descifrar / Cerrar sesión.
  *
  * Toda la criptografía está en cliente.servicio (SesionLocal): esta clase solo muestra
  * ventanas y llama a sus métodos registrar(), iniciarSesion(), cifrar(), listar() y descifrar().
@@ -28,7 +27,6 @@ public class Interfaz {
     private JFrame ventana;
     private final DefaultListModel<DetalleArchivo> modelo = new DefaultListModel<>();
     private final JList<DetalleArchivo> lista = new JList<>(modelo);
-    private final JTextArea registro = new JTextArea();          // pasos criptográficos
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new Interfaz().pedirAcceso());
@@ -58,7 +56,7 @@ public class Interfaz {
         String usuario = campoUsuario.getText().trim();
         char[] contrasena = campoContrasena.getPassword();
         SesionLocal nueva = new SesionLocal();
-        nueva.setRegistro(texto -> SwingUtilities.invokeLater(() -> registro.append(texto + "\n")));
+        
         try {
             if (eleccion == 1) {
                 nueva.registrar(usuario, contrasena);            // crea RSA y protege la clave privada
@@ -67,7 +65,7 @@ public class Interfaz {
             sesion = nueva;
             abrirVentanaPrincipal();
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(null, e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(null, "Error al acceder. Compruebe sus credenciales o inténtelo de nuevo.", "Error de autenticación", JOptionPane.ERROR_MESSAGE);
             pedirAcceso();                                       // volver a pedirlo
         } finally {
             java.util.Arrays.fill(contrasena, '\0');             // borrar la contraseña de memoria
@@ -91,16 +89,11 @@ public class Interfaz {
         botones.add(botonDescifrar);
         botones.add(botonSalir);
 
-        registro.setEditable(false);
-        JScrollPane cajaRegistro = new JScrollPane(registro);
-        cajaRegistro.setPreferredSize(new java.awt.Dimension(700, 200));
-
         ventana = new JFrame("Almacén seguro - usuario: " + sesion.getUsuario());
         ventana.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         ventana.add(botones, BorderLayout.NORTH);
         ventana.add(new JScrollPane(lista), BorderLayout.CENTER);
-        ventana.add(cajaRegistro, BorderLayout.SOUTH);
-        ventana.setSize(700, 520);
+        ventana.setSize(700, 320); // Tamaño reducido al quitar la consola inferior
         ventana.setLocationRelativeTo(null);
         ventana.setVisible(true);
 
@@ -117,7 +110,7 @@ public class Interfaz {
             sesion.cifrar(selector.getSelectedFile().toPath());
             actualizarLista();
         } catch (Exception e) {
-            mostrarError(e);
+            mostrarError();
         }
     }
 
@@ -136,9 +129,9 @@ public class Interfaz {
         }
         try {
             Path resultado = sesion.descifrar(elegido.id(), selector.getSelectedFile().toPath());
-            JOptionPane.showMessageDialog(ventana, "Archivo descifrado en:\n" + resultado);
+            JOptionPane.showMessageDialog(ventana, "Archivo descifrado exitosamente en:\n" + resultado);
         } catch (Exception e) {
-            mostrarError(e);
+            mostrarError();
         }
     }
 
@@ -146,7 +139,6 @@ public class Interfaz {
         sesion.close();                                          // olvida la clave privada
         ventana.dispose();
         modelo.clear();
-        registro.setText("");
         pedirAcceso();
     }
 
@@ -162,11 +154,11 @@ public class Interfaz {
                 modelo.addElement(a);
             }
         } catch (Exception e) {
-            mostrarError(e);
+            mostrarError();
         }
     }
 
-    private void mostrarError(Exception e) {
-        JOptionPane.showMessageDialog(ventana, e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+    private void mostrarError() {
+        JOptionPane.showMessageDialog(ventana, "Ha ocurrido un error inesperado al procesar la solicitud.", "Error de procesamiento", JOptionPane.ERROR_MESSAGE);
     }
 }
