@@ -32,7 +32,7 @@ public class ServicioCifrado {
         }
     }
 
-    //
+    // Genera el par de claves RSA, cifra la clave privada y las guarda
     public void registrarUsuario(String usuario, char[] contrasena) throws GeneralSecurityException, IOException {
         if (!NOMBRE_VALIDO.matcher(usuario).matches()) {
             throw new IllegalArgumentException("Nombre de usuario no válido (3-32 caracteres)");
@@ -55,7 +55,7 @@ public class ServicioCifrado {
         return ProtectorClavePrivada.recuperar(GestorFicheros.leerClavePrivadaCifrada(usuario), contrasena);
     }
 
-    // 
+    // Genera una clave AES para cifrar el archivo, la cifra con RSA y lo guarda
     public String cifrarArchivo(String usuario, Path archivo) throws GeneralSecurityException, IOException {
         comprobarUsuarioExiste(usuario);
         if (!Files.isRegularFile(archivo)) {
@@ -81,7 +81,7 @@ public class ServicioCifrado {
         return id;
     }
 
-    // 
+    // Recupera la clave AES de los metadatos, la descifra y descifra el archivo
     public Path descifrarArchivo(String usuario, PrivateKey clavePrivada, String idArchivo, Path carpetaDestino) throws GeneralSecurityException, IOException {
 
         GestorFicheros.MetadatosArchivo meta = GestorFicheros.leerMetadatosArchivo(idArchivo);
@@ -100,7 +100,7 @@ public class ServicioCifrado {
         return destino;
     }
 
-    // 
+    // Devuelve lista de nombres e identificadores de todos los usuarios
     public List<DetalleArchivo> listarDetalle(String usuario) throws IOException {
         List<DetalleArchivo> resultado = new ArrayList<>();
         for (String id : GestorFicheros.listarIdsArchivos()) {
@@ -112,14 +112,14 @@ public class ServicioCifrado {
         return resultado;
     }
 
-    //
+    // Valida que el usuario tenga el formato correcto y ya esté registrado
     private void comprobarUsuarioExiste(String usuario) throws IOException {
         if (!NOMBRE_VALIDO.matcher(usuario).matches() || !GestorFicheros.existeUsuario(usuario)) {
             throw new IllegalArgumentException("El usuario '" + usuario + "' no existe");
         }
     }
 
-    //
+    // Gestion de directorios y numeración
     private static Path rutaLibre(Path carpeta, String nombreOriginal) {
         String nombre = Path.of(nombreOriginal).getFileName().toString();
         Path destino = carpeta.resolve(nombre);

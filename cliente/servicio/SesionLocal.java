@@ -31,7 +31,7 @@ public class SesionLocal implements AutoCloseable {
         return servicio.cifrarArchivo(usuario, archivo);
     }
 
-    // 
+    // Lista de archivos cifrados de este usuario
     public List<DetalleArchivo> listar() throws IOException {
         exigirSesion();
         return servicio.listarDetalle(usuario);
