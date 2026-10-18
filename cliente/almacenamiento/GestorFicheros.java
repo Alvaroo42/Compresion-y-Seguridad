@@ -74,33 +74,35 @@ public class GestorFicheros {
         }
     }
 
-    // 
+    // Guarda las claves publica y privada de un usuario en sus rutas
     public static void guardarClavesUsuario(String nombreUsuario, byte[] clavePublica, byte[] clavePrivadaCifrada) throws IOException {
         Files.write(rutaPublica(nombreUsuario), codificador.codificarABytes(clavePublica));
         Files.write(rutaPrivada(nombreUsuario), codificador.codificarABytes(clavePrivadaCifrada));
     }
 
+    // Devuelve la clave publica en bytes
     public static byte[] leerClavePublica(String nombreUsuario) throws IOException {
-        // Leemos del disco y decodificamos para recuperar los bytes originales
         byte[] leido = Files.readAllBytes(rutaPublica(nombreUsuario));
         return codificador.decodificarDeBytes(leido);
     }
 
+    // Devuelve la clave privada en bytes
     public static byte[] leerClavePrivadaCifrada(String nombreUsuario) throws IOException {
-        // Leemos del disco y decodificamos para recuperar los bytes originales
         byte[] leido = Files.readAllBytes(rutaPrivada(nombreUsuario));
         return codificador.decodificarDeBytes(leido);
     }
 
+    // Comprueba si existe un usuario
     public static boolean existeUsuario(String nombreUsuario) throws IOException {
         return Files.exists(rutaPublica(nombreUsuario)) && Files.exists(rutaPrivada(nombreUsuario));
     }
 
-    // Devuelve 
+    // Devuelve la ruta de la clave publica de un usuario especifico
     private static Path rutaPublica(String nombreUsuario) throws IOException {
         return directorioClaves().resolve(nombreUsuario + "_publica.key");
     }
 
+    // Devuelve la ruta de la clave publica de un usuario especifico
     private static Path rutaPrivada(String nombreUsuario) throws IOException {
         return directorioClaves().resolve(nombreUsuario + "_privada.cif");
     }

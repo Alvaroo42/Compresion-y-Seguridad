@@ -9,21 +9,9 @@ import java.awt.FlowLayout;
 import java.nio.file.Path;
 import java.util.List;
 
-/**
- * Interfaz básica en un único archivo (Swing estándar, sin librerías).
- *
- * Flujo:
- *   1. Ventana de acceso (JOptionPane): usuario + contraseña -> Entrar o Registrarse.
- *   2. Ventana principal: lista de archivos cifrados, botones Cifrar / Descifrar / Cerrar sesión.
- *
- * Toda la criptografía está en cliente.servicio (SesionLocal): esta clase solo muestra
- * ventanas y llama a sus métodos registrar(), iniciarSesion(), cifrar(), listar() y descifrar().
- *
- * Ejecutar:  java -cp out cliente.interfaz.Interfaz
- */
 public class Interfaz {
 
-    private SesionLocal sesion;                                  // usuario que ha entrado
+    private SesionLocal sesion;
     private JFrame ventana;
     private final DefaultListModel<DetalleArchivo> modelo = new DefaultListModel<>();
     private final JList<DetalleArchivo> lista = new JList<>(modelo);
@@ -32,25 +20,21 @@ public class Interfaz {
         SwingUtilities.invokeLater(() -> new Interfaz().pedirAcceso());
     }
 
-    // ------------------------------------------------------------------
-    // 1. Acceso
-    // ------------------------------------------------------------------
-
-    /** Pide usuario y contraseña. Se repite hasta que entre bien o pulse Salir. */
+    // Pedir usuario y contraseña
     private void pedirAcceso() {
         JTextField campoUsuario = new JTextField(15);
         JPasswordField campoContrasena = new JPasswordField(15);
         JPanel panel = new JPanel(new java.awt.GridLayout(0, 1, 0, 4));
+
         panel.add(new JLabel("Usuario:"));
         panel.add(campoUsuario);
         panel.add(new JLabel("Contraseña (mínimo 4 caracteres):"));
         panel.add(campoContrasena);
 
         String[] opciones = {"Entrar", "Registrarse"};
-        int eleccion = JOptionPane.showOptionDialog(null, panel, "Almacén seguro",
-                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, opciones, opciones[0]);
+        int eleccion = JOptionPane.showOptionDialog(null, panel, "Almacén seguro", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, opciones, opciones[0]);
         if (eleccion != 0 && eleccion != 1) {
-            System.exit(0);                                      // cerrar la ventana
+            System.exit(0);
         }
 
         String usuario = campoUsuario.getText().trim();
@@ -59,32 +43,29 @@ public class Interfaz {
         
         try {
             if (eleccion == 1) {
-                nueva.registrar(usuario, contrasena);            // crea RSA y protege la clave privada
+                nueva.registrar(usuario, contrasena);
             }
-            nueva.iniciarSesion(usuario, contrasena);            // descifra la clave privada con la contraseña
+            nueva.iniciarSesion(usuario, contrasena);
             sesion = nueva;
             abrirVentanaPrincipal();
         } catch (Exception e) {
             JOptionPane.showMessageDialog(null, "Error al acceder. Compruebe sus credenciales o inténtelo de nuevo.", "Error de autenticación", JOptionPane.ERROR_MESSAGE);
-            pedirAcceso();                                       // volver a pedirlo
+            pedirAcceso();
         } finally {
-            java.util.Arrays.fill(contrasena, '\0');             // borrar la contraseña de memoria
+            java.util.Arrays.fill(contrasena, '\0');
         }
     }
 
-    // ------------------------------------------------------------------
-    // 2. Ventana principal
-    // ------------------------------------------------------------------
-
+    // Ventana principal de uso
     private void abrirVentanaPrincipal() {
         JButton botonCifrar = new JButton("Cifrar archivo...");
         JButton botonDescifrar = new JButton("Descifrar seleccionado...");
         JButton botonSalir = new JButton("Cerrar sesión");
+        JPanel botones = new JPanel(new FlowLayout(FlowLayout.LEFT));
+
         botonCifrar.addActionListener(e -> cifrar());
         botonDescifrar.addActionListener(e -> descifrar());
         botonSalir.addActionListener(e -> cerrarSesion());
-
-        JPanel botones = new JPanel(new FlowLayout(FlowLayout.LEFT));
         botones.add(botonCifrar);
         botones.add(botonDescifrar);
         botones.add(botonSalir);
@@ -93,16 +74,17 @@ public class Interfaz {
         ventana.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         ventana.add(botones, BorderLayout.NORTH);
         ventana.add(new JScrollPane(lista), BorderLayout.CENTER);
-        ventana.setSize(700, 320); // Tamaño reducido al quitar la consola inferior
+        ventana.setSize(700, 320);
         ventana.setLocationRelativeTo(null);
         ventana.setVisible(true);
 
         actualizarLista();
     }
 
-    /** Elige un archivo y lo cifra con una clave AES nueva. */
+    // Elige un archivo y lo cifra con una clave AES nueva
     private void cifrar() {
         JFileChooser selector = new JFileChooser();
+
         if (selector.showOpenDialog(ventana) != JFileChooser.APPROVE_OPTION) {
             return;
         }
@@ -114,16 +96,20 @@ public class Interfaz {
         }
     }
 
-    /** Descifra el archivo seleccionado en la carpeta que elija el usuario. */
+    // Descifra el archivo seleccionado en la carpeta que elija el usuario
     private void descifrar() {
         DetalleArchivo elegido = lista.getSelectedValue();
+
         if (elegido == null) {
             JOptionPane.showMessageDialog(ventana, "Selecciona un archivo de la lista.");
             return;
         }
+
         JFileChooser selector = new JFileChooser();
+
         selector.setDialogTitle("Carpeta donde guardar el archivo descifrado");
         selector.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+
         if (selector.showSaveDialog(ventana) != JFileChooser.APPROVE_OPTION) {
             return;
         }
@@ -135,17 +121,15 @@ public class Interfaz {
         }
     }
 
+    // Cerrar Sesion
     private void cerrarSesion() {
-        sesion.close();                                          // olvida la clave privada
+        sesion.close();
         ventana.dispose();
         modelo.clear();
         pedirAcceso();
     }
 
-    // ------------------------------------------------------------------
-    // Auxiliares
-    // ------------------------------------------------------------------
-
+    // Actualizar lista de archivos cifrados
     private void actualizarLista() {
         try {
             List<DetalleArchivo> archivos = sesion.listar();
@@ -158,6 +142,7 @@ public class Interfaz {
         }
     }
 
+    // Mostrar mensaje de error
     private void mostrarError() {
         JOptionPane.showMessageDialog(ventana, "Ha ocurrido un error inesperado al procesar la solicitud.", "Error de procesamiento", JOptionPane.ERROR_MESSAGE);
     }
