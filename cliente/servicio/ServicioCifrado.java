@@ -6,37 +6,30 @@ import cliente.criptografia.CifradorAES;
 import cliente.criptografia.ProtectorClavePrivada;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 public class ServicioCifrado {
 
     private static final Pattern NOMBRE_VALIDO = Pattern.compile("[A-Za-z0-9_.-]{3,32}");
-    public static final int LONGITUD_MIN_CONTRASENA = 4;
+    private static final int LONGITUD_MIN_CONTRASENA = 4;
 
-    public record DetalleArchivo(String id, String nombre, long tamano, Instant fechaCifrado) {
+    /** Un archivo cifrado de la lista (la interfaz muestra su nombre original). */
+    public record DetalleArchivo(String id, String nombre) {
         @Override
         public String toString() {
             return nombre;
         }
-    }
-
-    private Consumer<String> registro = mensaje -> { };
-
-    public ServicioCifrado() {}
-
-    public void setRegistro(Consumer<String> registro) {
-        this.registro = registro == null ? m -> { } : registro;
     }
 
     // ------------------------------------------------------------------
@@ -54,25 +47,14 @@ public class ServicioCifrado {
             throw new IllegalArgumentException("El usuario '" + usuario + "' ya existe");
         }
 
-        log("ALTA de '" + usuario + "'");
         KeyPair par = CifradoRSA.generarParClaves();
         byte[] privadaProtegida = ProtectorClavePrivada.proteger(par.getPrivate(), contrasena);
         GestorFicheros.guardarClavesUsuario(usuario, par.getPublic().getEncoded(), privadaProtegida);
-        log("  guardado: claves pública y privada del usuario   [OK]");
     }
 
-    public boolean comprobarContrasena(String usuario, char[] contrasena) throws IOException, GeneralSecurityException {
-        try {
-            obtenerClavePrivada(usuario, contrasena);
-            return true;
-        } catch (ProtectorClavePrivada.ContrasenaIncorrectaException e) {
-            return false;
-        }
-    }
-
+    /** Recupera la clave privada del usuario con su contraseña. */
     public PrivateKey iniciarSesion(String usuario, char[] contrasena) throws IOException, GeneralSecurityException {
         comprobarUsuarioExiste(usuario);
-        log("INICIO DE SESIÓN de '" + usuario + "'");
         return ProtectorClavePrivada.recuperar(GestorFicheros.leerClavePrivadaCifrada(usuario), contrasena);
     }
 
@@ -86,35 +68,24 @@ public class ServicioCifrado {
             throw new IllegalArgumentException("No existe el archivo: " + archivo);
         }
 
-        log("CIFRAR '" + archivo.getFileName() + "'");
         PublicKey pu = CifradoRSA.cargarClavePublica(GestorFicheros.leerClavePublica(usuario));
-        byte[] k = CifradorAES.generarClaveAES();
+        byte[] k = CifradorAES.generarClaveAES();             // clave AES nueva para este archivo
         String id = UUID.randomUUID().toString();
-        
-        // Ya no declaramos 'Path destino' aquí para el archivo .cif.
-        // Solo necesitamos el ID para pedirle el flujo a GestorFicheros.
 
         try {
-            // 1. Abrimos el archivo original para leer
-            try (java.io.InputStream in = Files.newInputStream(archivo);
-                 // 2. Pedimos a GestorFicheros el flujo de salida ya preparado con Base64
-                 java.io.OutputStream outCifrado = GestorFicheros.obtenerFlujoSalidaCifrado(id)) {
-                
-                // 3. CifradorAES procesa el flujo (sin saber que acaba en un archivo Base64)
+            // 1. Se cifra el archivo con K
+            try (InputStream in = Files.newInputStream(archivo);
+                 OutputStream outCifrado = GestorFicheros.obtenerFlujoSalidaCifrado(id)) {
                 CifradorAES.cifrarFlujo(in, outCifrado, k);
             }
-
+            // 2. Se cifra K con la clave pública y se guarda junto al nombre original
             byte[] kCifrada = CifradoRSA.cifrarClaveAES(k, pu);
             GestorFicheros.guardarMetadatosArchivo(id, usuario, archivo.getFileName().toString(), kCifrada);
-            log("  guardado: archivo " + id + ".cif y sus metadatos   [OK]");
-            
         } catch (GeneralSecurityException | IOException ex) {
-            // Si algo falla, limpiamos los archivos a medias usando GestorFicheros
-            Files.deleteIfExists(GestorFicheros.rutaArchivoCifrado(id)); 
+            // Si algo falla, no se deja ningún archivo a medias
+            Files.deleteIfExists(GestorFicheros.rutaArchivoCifrado(id));
             Files.deleteIfExists(GestorFicheros.directorioCifrados().resolve(id + ".meta"));
             throw ex;
-        } finally {
-            java.util.Arrays.fill(k, (byte) 0);
         }
         return id;
     }
@@ -125,53 +96,36 @@ public class ServicioCifrado {
 
     public Path descifrarArchivo(String usuario, PrivateKey clavePrivada, String idArchivo, Path carpetaDestino)
             throws GeneralSecurityException, IOException {
-        
+
         GestorFicheros.MetadatosArchivo meta = GestorFicheros.leerMetadatosArchivo(idArchivo);
         if (meta == null || !meta.usuario().equals(usuario)) {
             throw new IllegalArgumentException("El usuario no tiene acceso a ese archivo");
         }
 
-        log("DESCIFRAR '" + meta.nombreOriginal() + "'");
-        byte[] k = CifradoRSA.descifrarClaveAES(meta.claveCifradaRSA(), clavePrivada); 
-        
-        try {
-            Files.createDirectories(carpetaDestino);
-            Path destino = rutaLibre(carpetaDestino, meta.nombreOriginal());
-            
-            // 1. Pedimos a GestorFicheros el flujo de entrada (ya decodificando Base64)
-            try (java.io.InputStream inCifrado = GestorFicheros.obtenerFlujoEntradaCifrado(idArchivo);
-                 // 2. Abrimos el archivo final donde quedará en claro
-                 java.io.OutputStream outClaro = Files.newOutputStream(destino)) {
-                
-                // 3. CifradorAES hace su trabajo sobre los flujos
-                CifradorAES.descifrarFlujo(inCifrado, outClaro, k);
-            }
-            
-            log("  Archivo descifrado correctamente   [OK]");
-            return destino;
-        } finally {
-            java.util.Arrays.fill(k, (byte) 0);
+        // 1. Se recupera K con la clave privada
+        byte[] k = CifradoRSA.descifrarClaveAES(meta.claveCifradaRSA(), clavePrivada);
+
+        // 2. Se descifra el archivo con K
+        Files.createDirectories(carpetaDestino);
+        Path destino = rutaLibre(carpetaDestino, meta.nombreOriginal());
+        try (InputStream inCifrado = GestorFicheros.obtenerFlujoEntradaCifrado(idArchivo);
+             OutputStream outClaro = Files.newOutputStream(destino)) {
+            CifradorAES.descifrarFlujo(inCifrado, outClaro, k);
         }
+        return destino;
     }
 
     // ------------------------------------------------------------------
     // Consultas
     // ------------------------------------------------------------------
 
+    /** Archivos cifrados que pertenecen al usuario. */
     public List<DetalleArchivo> listarDetalle(String usuario) throws IOException {
         List<DetalleArchivo> resultado = new ArrayList<>();
         for (String id : GestorFicheros.listarIdsArchivos()) {
             GestorFicheros.MetadatosArchivo meta = GestorFicheros.leerMetadatosArchivo(id);
-            
             if (meta != null && meta.usuario().equals(usuario)) {
-                Path cif = GestorFicheros.rutaArchivoCifrado(id);
-                if (!Files.exists(cif)) continue; 
-                
-                resultado.add(new DetalleArchivo(
-                        id,
-                        meta.nombreOriginal(),
-                        Math.max(0, Files.size(cif) - CifradorAES.TAM_IV), 
-                        Files.getLastModifiedTime(cif).toInstant()));
+                resultado.add(new DetalleArchivo(id, meta.nombreOriginal()));
             }
         }
         return resultado;
@@ -181,21 +135,14 @@ public class ServicioCifrado {
     // Auxiliares
     // ------------------------------------------------------------------
 
-    private PrivateKey obtenerClavePrivada(String usuario, char[] contrasena) throws IOException, GeneralSecurityException {
-        comprobarUsuarioExiste(usuario);
-        return ProtectorClavePrivada.recuperar(GestorFicheros.leerClavePrivadaCifrada(usuario), contrasena);
-    }
-
+    /** El nombre se usa para construir rutas de ficheros: se valida para que no pueda salirse de datos/. */
     private void comprobarUsuarioExiste(String usuario) throws IOException {
         if (!NOMBRE_VALIDO.matcher(usuario).matches() || !GestorFicheros.existeUsuario(usuario)) {
             throw new IllegalArgumentException("El usuario '" + usuario + "' no existe");
         }
     }
 
-    private void log(String mensaje) {
-        registro.accept(mensaje);
-    }
-
+    /** Si ya existe un archivo con ese nombre, añade (1), (2)... para no sobrescribirlo. */
     private static Path rutaLibre(Path carpeta, String nombreOriginal) {
         String nombre = Path.of(nombreOriginal).getFileName().toString();
         Path destino = carpeta.resolve(nombre);

@@ -46,11 +46,11 @@ public class Interfaz {
         panel.add(new JLabel("Contraseña (mínimo 4 caracteres):"));
         panel.add(campoContrasena);
 
-        String[] opciones = {"Entrar", "Registrarse", "Salir"};
+        String[] opciones = {"Entrar", "Registrarse"};
         int eleccion = JOptionPane.showOptionDialog(null, panel, "Almacén seguro",
                 JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, opciones, opciones[0]);
         if (eleccion != 0 && eleccion != 1) {
-            System.exit(0);                                      // Salir o cerrar la ventana
+            System.exit(0);                                      // cerrar la ventana
         }
 
         String usuario = campoUsuario.getText().trim();

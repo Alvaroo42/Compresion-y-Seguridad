@@ -7,31 +7,18 @@ import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.PrivateKey;
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
  * Sesión de un usuario sobre ServicioCifrado. La interfaz sólo habla con esta clase.
  *
  * Tras iniciarSesion la clave privada queda SÓLO en memoria; ni la contraseña ni la clave
  * privada en claro se guardan. close() olvida la clave privada.
- *
- *   try (SesionLocal s = new SesionLocal()) {
- *       s.registrar("alice", contrasena);          // sólo la primera vez
- *       s.iniciarSesion("alice", contrasena);
- *       String id = s.cifrar(Path.of("foto.jpg"));
- *       s.descifrar(id, Path.of("descifrados"));
- *   }
  */
 public class SesionLocal implements AutoCloseable {
 
     private final ServicioCifrado servicio = new ServicioCifrado();
     private String usuario;
     private PrivateKey clavePrivada;
-
-    /** Recibe una línea de texto por cada paso criptográfico (para el panel de registro). */
-    public void setRegistro(Consumer<String> registro) {
-        servicio.setRegistro(registro);
-    }
 
     /** Da de alta al usuario (genera su par RSA). Después hay que llamar a iniciarSesion. */
     public void registrar(String usuario, char[] contrasena) throws GeneralSecurityException, IOException {
