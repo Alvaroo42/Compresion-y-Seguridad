@@ -102,7 +102,7 @@ public class GestorFicheros {
         return directorioClaves().resolve(nombreUsuario + "_publica.key");
     }
 
-    // Devuelve la ruta de la clave publica de un usuario especifico
+    // Devuelve la ruta de la clave privada cifrada de un usuario especifico
     private static Path rutaPrivada(String nombreUsuario) throws IOException {
         return directorioClaves().resolve(nombreUsuario + "_privada.cif");
     }

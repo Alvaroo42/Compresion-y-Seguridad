@@ -100,7 +100,7 @@ public class ServicioCifrado {
         return destino;
     }
 
-    // Devuelve lista de nombres e identificadores de todos los usuarios
+    // Devuelve lista de nombres e identificadores de los archivos cifrados del usuario
     public List<DetalleArchivo> listarDetalle(String usuario) throws IOException {
         List<DetalleArchivo> resultado = new ArrayList<>();
         for (String id : GestorFicheros.listarIdsArchivos()) {
