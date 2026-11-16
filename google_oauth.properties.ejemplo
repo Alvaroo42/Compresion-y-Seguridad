@@ -1,0 +1,7 @@
+# Mejora: inicio de sesión con Google como segundo factor.
+# 1. Copia este fichero como google_oauth.properties en la carpeta del proyecto (cliente y servidor).
+# 2. Rellena estos dos valores con el "ID de cliente OAuth" de tipo "Aplicación de escritorio" que creéis en
+#    https://console.cloud.google.com (los pasos están en LEEME.md).
+# google_oauth.properties NO se sube al repositorio.
+clientId=
+clientSecret=

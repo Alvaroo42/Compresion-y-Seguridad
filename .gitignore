@@ -1,2 +1,8 @@
+# Generados y secretos: no se suben al repositorio (la memoria explica cómo regenerarlos)
 out/
 datos/
+servidor_datos/
+servidor_secretos/
+*.p12
+*.crt
+google_oauth.properties
