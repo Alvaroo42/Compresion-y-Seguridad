@@ -447,18 +447,34 @@ public class Interfaz {
         if (e instanceof IllegalArgumentException || e instanceof IllegalStateException) {
             return e.getMessage();
         }
+        // Primero se busca un fallo de certificado en TODA la cadena de causas: Java a veces lo envuelve en un
+        // error de conexión, y entonces parecería que el servidor no está encendido
+        String detalle = "\n\nDetalle: " + detalleTecnico(e);
         for (Throwable causa = e; causa != null; causa = causa.getCause()) {
-            if (causa instanceof SSLException) {
+            if (causa instanceof SSLException || causa instanceof java.security.cert.CertificateException) {
                 return "No se puede establecer una conexión segura con " + servidor + ".\n"
-                        + "El certificado del servidor no es el esperado (¿es el cliente_confianza.p12 de este servidor?).";
+                        + "El certificado del servidor no es el esperado: o no incluye esta dirección (genéralo con\n"
+                        + "GenerarCertificado.bat \"dns:localhost,ip:127.0.0.1,ip:<IP del servidor>\") o el\n"
+                        + "cliente_confianza.p12 de este equipo no es el del servidor." + detalle;
             }
+        }
+        for (Throwable causa = e; causa != null; causa = causa.getCause()) {
             if (causa instanceof ConnectException || causa instanceof UnknownHostException || causa instanceof HttpTimeoutException) {
-                return "No se puede conectar con el servidor " + servidor + ".\nComprueba que está en marcha y que la dirección es correcta.";
+                return "No se puede conectar con el servidor " + servidor + ".\nComprueba que está en marcha y que la dirección es correcta." + detalle;
             }
         }
         if (e instanceof java.io.IOException) {
-            return "Se ha perdido la conexión con el servidor o no se ha podido leer o escribir el archivo.\n(" + e.getMessage() + ")";
+            return "Se ha perdido la conexión con el servidor o no se ha podido leer o escribir el archivo." + detalle;
         }
         return "Ha ocurrido un error inesperado: " + e.getMessage();
+    }
+
+    // Causa más profunda de un error (clase y mensaje), para poder saber qué ha fallado de verdad
+    private static String detalleTecnico(Throwable e) {
+        Throwable raiz = e;
+        while (raiz.getCause() != null && raiz.getCause() != raiz) {
+            raiz = raiz.getCause();
+        }
+        return raiz.getClass().getSimpleName() + (raiz.getMessage() == null ? "" : ": " + raiz.getMessage());
     }
 }
