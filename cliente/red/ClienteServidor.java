@@ -36,6 +36,12 @@ public class ClienteServidor {
 
     private static final Pattern DIRECCION = Pattern.compile("[A-Za-z0-9.-]+(:[0-9]{1,5})?");
     private static final Base64.Encoder B64 = Base64.getEncoder();
+
+    // Tiempos de espera. Entre dos PC (o por una Wi-Fi compartida desde el móvil) la conexión y la primera
+    // negociación TLS pueden tardar bastante más que en local, así que se deja margen. La espera para conectar
+    // se puede cambiar con -Dcys.espera=<segundos>.
+    private static final Duration ESPERA_CONEXION = Duration.ofSeconds(Long.getLong("cys.espera", 60));
+    private static final Duration ESPERA_RESPUESTA = Duration.ofSeconds(120);
     private static final Base64.Decoder DE_B64 = Base64.getDecoder();
 
     // Error devuelto por el servidor: código HTTP y su mensaje
@@ -89,7 +95,7 @@ public class ClienteServidor {
         this.http = HttpClient.newBuilder()
                 .sslContext(ssl)
                 .version(HttpClient.Version.HTTP_1_1)
-                .connectTimeout(Duration.ofSeconds(10))
+                .connectTimeout(ESPERA_CONEXION)
                 .build();
     }
 
@@ -176,7 +182,7 @@ public class ClienteServidor {
     // ------------------------------------------------------------------ utilidades
 
     private HttpRequest.Builder peticion(String ruta, String token) {
-        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + ruta)).timeout(Duration.ofSeconds(30));
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + ruta)).timeout(ESPERA_RESPUESTA);
         if (token != null) {
             b.header(Protocolo.CABECERA_AUTORIZACION, Protocolo.PREFIJO_BEARER + token);
         }
