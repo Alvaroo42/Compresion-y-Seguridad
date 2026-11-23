@@ -48,20 +48,14 @@ public class ClienteServidor {
     public static class ErrorServidor extends IOException {
         private static final long serialVersionUID = 1L;
         private final int estado;
-        private final boolean requiereGoogle;
 
-        public ErrorServidor(int estado, String mensaje, boolean requiereGoogle) {
+        public ErrorServidor(int estado, String mensaje) {
             super(mensaje);
             this.estado = estado;
-            this.requiereGoogle = requiereGoogle;
         }
 
         public int estado() {
             return estado;
-        }
-
-        public boolean requiereGoogle() {
-            return requiereGoogle;
         }
     }
 
@@ -70,7 +64,7 @@ public class ClienteServidor {
     }
 
     public record RespuestaLogin(String token, long validezSegundos, byte[] clavePublica, byte[] clavePrivadaCifrada,
-                                 String correoGoogle, List<ArchivoRemoto> archivos) {
+                                 List<ArchivoRemoto> archivos) {
     }
 
     private final HttpClient http;
@@ -99,24 +93,21 @@ public class ClienteServidor {
                 .build();
     }
 
-    // POST /REGISTRO: usuario, claveLogin, clavePublica, clavePrivadaCifrada (+ token de Google si se usa)
-    public void registrar(String usuario, byte[] claveLogin, byte[] clavePublica, byte[] clavePrivadaCifrada,
-                          String idTokenGoogle, String nonceGoogle) throws IOException {
+    // POST /REGISTRO: usuario, claveLogin, clavePublica, clavePrivadaCifrada
+    public void registrar(String usuario, byte[] claveLogin, byte[] clavePublica, byte[] clavePrivadaCifrada) throws IOException {
         Map<String, String> campos = new LinkedHashMap<>();
         campos.put(Protocolo.CAMPO_USUARIO, usuario);
         campos.put(Protocolo.CAMPO_CLAVE_LOGIN, B64.encodeToString(claveLogin));
         campos.put(Protocolo.CAMPO_CLAVE_PUBLICA, B64.encodeToString(clavePublica));
         campos.put(Protocolo.CAMPO_CLAVE_PRIVADA_CIFRADA, B64.encodeToString(clavePrivadaCifrada));
-        anadirGoogle(campos, idTokenGoogle, nonceGoogle);
         exigir(enviar(peticion(Protocolo.REGISTRO, null).POST(cuerpo(campos)).build()), 201);
     }
 
     // POST /LOGIN: usuario y claveLogin. Devuelve token, pública, privada cifrada y la lista de archivos
-    public RespuestaLogin login(String usuario, byte[] claveLogin, String idTokenGoogle, String nonceGoogle) throws IOException {
+    public RespuestaLogin login(String usuario, byte[] claveLogin) throws IOException {
         Map<String, String> campos = new LinkedHashMap<>();
         campos.put(Protocolo.CAMPO_USUARIO, usuario);
         campos.put(Protocolo.CAMPO_CLAVE_LOGIN, B64.encodeToString(claveLogin));
-        anadirGoogle(campos, idTokenGoogle, nonceGoogle);
         HttpResponse<byte[]> respuesta = exigir(enviar(peticion(Protocolo.LOGIN, null).POST(cuerpo(campos)).build()), 200);
 
         Properties datos = Protocolo.leer(new String(respuesta.body(), StandardCharsets.UTF_8));
@@ -135,7 +126,7 @@ public class ClienteServidor {
                 Long.parseLong(datos.getProperty(Protocolo.CAMPO_VALIDEZ_TOKEN, "1800")),
                 DE_B64.decode(datos.getProperty(Protocolo.CAMPO_CLAVE_PUBLICA)),
                 DE_B64.decode(datos.getProperty(Protocolo.CAMPO_CLAVE_PRIVADA_CIFRADA)),
-                datos.getProperty(Protocolo.CAMPO_CORREO_GOOGLE), archivos);
+                archivos);
     }
 
     // POST /SUBIR: cuerpo = bytes del .cif; cabeceras Nombre, ClaveAESCifrada, Firma y Destinatario (opcional)
@@ -163,7 +154,7 @@ public class ClienteServidor {
             HttpResponse<InputStream> respuesta = http.send(peticion, HttpResponse.BodyHandlers.ofInputStream());
             try (InputStream in = respuesta.body()) {
                 if (respuesta.statusCode() != 200) {
-                    throw new ErrorServidor(respuesta.statusCode(), new String(in.readNBytes(1024), StandardCharsets.UTF_8).trim(), false);
+                    throw new ErrorServidor(respuesta.statusCode(), new String(in.readNBytes(1024), StandardCharsets.UTF_8).trim());
                 }
                 Files.copy(in, destino, StandardCopyOption.REPLACE_EXISTING);
             }
@@ -193,13 +184,6 @@ public class ClienteServidor {
         return HttpRequest.BodyPublishers.ofString(Protocolo.escribir(campos), StandardCharsets.UTF_8);
     }
 
-    private static void anadirGoogle(Map<String, String> campos, String idToken, String nonce) {
-        if (idToken != null) {
-            campos.put(Protocolo.CAMPO_ID_TOKEN_GOOGLE, idToken);
-            campos.put(Protocolo.CAMPO_NONCE_GOOGLE, nonce);
-        }
-    }
-
     private HttpResponse<byte[]> enviar(HttpRequest peticion) throws IOException {
         try {
             return http.send(peticion, HttpResponse.BodyHandlers.ofByteArray());
@@ -211,8 +195,7 @@ public class ClienteServidor {
 
     private static HttpResponse<byte[]> exigir(HttpResponse<byte[]> respuesta, int esperado) throws ErrorServidor {
         if (respuesta.statusCode() != esperado) {
-            boolean google = respuesta.headers().firstValue(Protocolo.CABECERA_REQUIERE_GOOGLE).isPresent();
-            throw new ErrorServidor(respuesta.statusCode(), new String(respuesta.body(), StandardCharsets.UTF_8).trim(), google);
+            throw new ErrorServidor(respuesta.statusCode(), new String(respuesta.body(), StandardCharsets.UTF_8).trim());
         }
         return respuesta;
     }

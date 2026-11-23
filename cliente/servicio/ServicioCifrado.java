@@ -6,7 +6,6 @@ import cliente.criptografia.CifradorAES;
 import cliente.criptografia.FirmaDigital;
 import cliente.criptografia.FirmaDigital.FirmaNoValidaException;
 import cliente.criptografia.ProtectorClavePrivada;
-import cliente.google.CredencialGoogle;
 import cliente.red.ClienteServidor;
 import cliente.red.ClienteServidor.ArchivoRemoto;
 import cliente.red.ClienteServidor.RespuestaLogin;
@@ -50,7 +49,7 @@ public class ServicioCifrado {
 
     // Lo que queda en memoria tras iniciar sesión
     public record DatosSesion(String token, Instant caducidad, PrivateKey clavePrivada, PublicKey clavePublica,
-                              String correoGoogle, List<DetalleArchivo> archivos) {
+                              List<DetalleArchivo> archivos) {
     }
 
     private final ClienteServidor red;
@@ -62,7 +61,7 @@ public class ServicioCifrado {
 
     // 7.1 Registro: validar, derivar las dos claves, generar RSA-2048, cifrar la privada con la clave de datos
     // y mandar al servidor usuario, clave de login, pública y privada cifrada.
-    public void registrarUsuario(String usuario, char[] contrasena, CredencialGoogle google) throws GeneralSecurityException, IOException {
+    public void registrarUsuario(String usuario, char[] contrasena) throws GeneralSecurityException, IOException {
         if (!Protocolo.usuarioValido(usuario)) {
             throw new IllegalArgumentException("Nombre de usuario no válido: de 3 a 32 letras, números, _ . o -");
         }
@@ -73,8 +72,7 @@ public class ServicioCifrado {
         try {
             KeyPair par = CifradoRSA.generarParClaves();
             byte[] privadaCifrada = ProtectorClavePrivada.proteger(par.getPrivate(), claves.datos());
-            red.registrar(usuario, claves.login(), par.getPublic().getEncoded(), privadaCifrada,
-                    google == null ? null : google.idToken(), google == null ? null : google.nonce());
+            red.registrar(usuario, claves.login(), par.getPublic().getEncoded(), privadaCifrada);
         } finally {
             claves.borrar();
         }
@@ -82,14 +80,13 @@ public class ServicioCifrado {
 
     // 7.2 Login: derivar de nuevo las dos claves, mandar la de login y, con la respuesta, descifrar la privada
     // con la de datos y preparar la lista de archivos.
-    public DatosSesion iniciarSesion(String usuario, char[] contrasena, CredencialGoogle google) throws GeneralSecurityException, IOException {
+    public DatosSesion iniciarSesion(String usuario, char[] contrasena) throws GeneralSecurityException, IOException {
         if (!Protocolo.usuarioValido(usuario)) {
-            throw new ClienteServidor.ErrorServidor(401, "Usuario o clave incorrectos", false);
+            throw new ClienteServidor.ErrorServidor(401, "Usuario o clave incorrectos");
         }
         ClavesDerivadas claves = DerivadorClaveContrasena.derivar(contrasena, DerivadorClaveContrasena.saltDe(usuario));
         try {
-            RespuestaLogin respuesta = red.login(usuario, claves.login(),
-                    google == null ? null : google.idToken(), google == null ? null : google.nonce());
+            RespuestaLogin respuesta = red.login(usuario, claves.login());
             PrivateKey privada = ProtectorClavePrivada.recuperar(respuesta.clavePrivadaCifrada(), claves.datos());
             PublicKey publica = CifradoRSA.cargarClavePublica(respuesta.clavePublica());
             comprobarPareja(privada, publica);
@@ -101,7 +98,7 @@ public class ServicioCifrado {
             // Se da por caducada un poco antes que en el servidor (un 10 %, como mucho 5 s) para no empezar una subida a punto de caducar
             long validez = respuesta.validezSegundos();
             Instant caducidad = Instant.now().plusSeconds(validez - Math.min(5, validez / 10));
-            return new DatosSesion(respuesta.token(), caducidad, privada, publica, respuesta.correoGoogle(), archivos);
+            return new DatosSesion(respuesta.token(), caducidad, privada, publica, archivos);
         } finally {
             claves.borrar();
         }

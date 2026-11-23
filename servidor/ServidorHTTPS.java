@@ -3,7 +3,6 @@ package servidor;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsParameters;
 import com.sun.net.httpserver.HttpsServer;
-import comun.ConfiguracionGoogle;
 import comun.Protocolo;
 import servidor.almacenamiento.AlmacenUsuarios;
 import servidor.manejadores.ManejadorBajar;
@@ -13,7 +12,6 @@ import servidor.manejadores.ManejadorRegistro;
 import servidor.manejadores.ManejadorSubir;
 import servidor.seguridad.GestorTokens;
 import servidor.seguridad.HashClaveLogin;
-import servidor.seguridad.VerificadorGoogle;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -44,7 +42,7 @@ public class ServidorHTTPS {
     private final HttpsServer servidor;
     private final ExecutorService hilos = Executors.newFixedThreadPool(16);
 
-    public ServidorHTTPS(int puerto, Path directorioDatos, SSLContext ssl, byte[] pimienta, Duration validezToken, VerificadorGoogle google) throws IOException {
+    public ServidorHTTPS(int puerto, Path directorioDatos, SSLContext ssl, byte[] pimienta, Duration validezToken) throws IOException {
         AlmacenUsuarios almacen = new AlmacenUsuarios(directorioDatos);
         GestorTokens tokens = new GestorTokens(validezToken);
         HashClaveLogin hash = new HashClaveLogin(pimienta);
@@ -58,8 +56,8 @@ public class ServidorHTTPS {
                 parametros.setSSLParameters(ssl);
             }
         });
-        servidor.createContext(Protocolo.REGISTRO, new ManejadorRegistro(almacen, tokens, hash, google));
-        servidor.createContext(Protocolo.LOGIN, new ManejadorLogin(almacen, tokens, hash, google));
+        servidor.createContext(Protocolo.REGISTRO, new ManejadorRegistro(almacen, tokens, hash));
+        servidor.createContext(Protocolo.LOGIN, new ManejadorLogin(almacen, tokens, hash));
         servidor.createContext(Protocolo.SUBIR, new ManejadorSubir(almacen, tokens));
         servidor.createContext(Protocolo.BAJAR, new ManejadorBajar(almacen, tokens));
         servidor.createContext(Protocolo.CLAVE_PUBLICA, new ManejadorClavePublica(almacen, tokens));
@@ -128,8 +126,6 @@ public class ServidorHTTPS {
         int puerto = args.length > 0 ? Integer.parseInt(args[0]) : PUERTO_POR_DEFECTO;
         Path datos = Path.of("servidor_datos");
         Path secretos = Path.of("servidor_secretos");
-        ConfiguracionGoogle configuracion = ConfiguracionGoogle.cargar(ConfiguracionGoogle.ruta());
-        VerificadorGoogle google = configuracion == null ? null : new VerificadorGoogle(configuracion);
 
         Path almacen = secretos.resolve("servidor.p12");
         if (!Files.isRegularFile(almacen)) {
@@ -140,11 +136,10 @@ public class ServidorHTTPS {
         SSLContext ssl = contextoTLS(almacen, clave);
         java.util.Arrays.fill(clave, '\0');
 
-        ServidorHTTPS servidor = new ServidorHTTPS(puerto, datos, ssl, cargarPimienta(secretos), GestorTokens.VALIDEZ_POR_DEFECTO, google);
+        ServidorHTTPS servidor = new ServidorHTTPS(puerto, datos, ssl, cargarPimienta(secretos), GestorTokens.VALIDEZ_POR_DEFECTO);
         servidor.iniciar();
         System.out.println("Servidor HTTPS (TLS 1.3) escuchando en el puerto " + servidor.puerto());
         System.out.println("Datos de usuarios en " + datos.toAbsolutePath());
-        System.out.println("Inicio con Google: " + (google == null ? "desactivado (no hay google_oauth.properties)" : "activado"));
         System.out.println("Pulsa Ctrl+C para pararlo.");
     }
 }

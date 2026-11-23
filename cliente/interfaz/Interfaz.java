@@ -2,14 +2,11 @@ package cliente.interfaz;
 
 import cliente.criptografia.FirmaDigital.FirmaNoValidaException;
 import cliente.criptografia.ProtectorClavePrivada.ContrasenaIncorrectaException;
-import cliente.google.CredencialGoogle;
-import cliente.google.InicioGoogle;
 import cliente.red.ClienteServidor;
 import cliente.red.ClienteServidor.ErrorServidor;
 import cliente.servicio.ServicioCifrado;
 import cliente.servicio.ServicioCifrado.DetalleArchivo;
 import cliente.servicio.SesionRemota;
-import comun.ConfiguracionGoogle;
 
 import javax.net.ssl.SSLException;
 import javax.swing.*;
@@ -23,7 +20,6 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.net.ConnectException;
-import java.net.URI;
 import java.net.UnknownHostException;
 import java.net.http.HttpTimeoutException;
 import java.nio.file.Files;
@@ -39,8 +35,7 @@ import java.util.function.Consumer;
  * al servidor solo le llega lo que ya va cifrado. Lo que usa la red se ejecuta en segundo plano para que la
  * ventana no se congele con archivos grandes.
  *
- * Opciones (java -D...): cys.servidor (localhost:8443 por defecto), cys.confianza (cliente_confianza.p12),
- * cys.google (google_oauth.properties) y cys.abrir=false para no abrir los archivos al descifrarlos.
+ * Opciones (java -D...): cys.servidor (localhost:8443 por defecto) y cys.confianza (cliente_confianza.p12).
  */
 public class Interfaz {
 
@@ -96,7 +91,7 @@ public class Interfaz {
         panel.add(new JLabel("Servidor (nombre:puerto):"));
         panel.add(campoServidor);
 
-        String[] opciones = {"Entrar", "Registrarse", "Registrarse con Google"};
+        String[] opciones = {"Entrar", "Registrarse"};
         int eleccion = JOptionPane.showOptionDialog(null, panel, TITULO, JOptionPane.DEFAULT_OPTION,
                 JOptionPane.PLAIN_MESSAGE, null, opciones, opciones[0]);
         if (eleccion < 0) {
@@ -106,18 +101,17 @@ public class Interfaz {
         char[] contrasena = campoContrasena.getPassword();
         servidor = campoServidor.getText().trim();
 
-        boolean registrar = eleccion >= 1;
-        boolean conGoogle = eleccion == 2;
-        if (registrar && !confirmarRegistro(contrasena, conGoogle)) {
+        boolean registrar = eleccion == 1;
+        if (registrar && !confirmarRegistro(contrasena)) {
             Arrays.fill(contrasena, '\0');
             pedirAcceso(usuario);
             return;
         }
-        acceder(registrar, conGoogle, usuario, contrasena);
+        acceder(registrar, usuario, contrasena);
     }
 
     // Al crear la cuenta se repite la contraseña y se avisa de que no se puede recuperar
-    private boolean confirmarRegistro(char[] contrasena, boolean conGoogle) {
+    private boolean confirmarRegistro(char[] contrasena) {
         JPasswordField repetida = new JPasswordField(18);
         JPanel panel = new JPanel(new GridLayout(0, 1, 0, 4));
         panel.add(new JLabel("Repite la contraseña:"));
@@ -125,10 +119,6 @@ public class Interfaz {
         panel.add(new JLabel(" "));
         panel.add(new JLabel("<html><b>Importante:</b> si olvidas la contraseña, nadie puede recuperar tus archivos,<br>"
                 + "ni siquiera el administrador del servidor.</html>"));
-        if (conGoogle) {
-            panel.add(new JLabel("<html>Después se abrirá el navegador para elegir tu cuenta de Google.<br>"
-                    + "A partir de entonces, para entrar harán falta la contraseña <b>y</b> esa cuenta de Google.</html>"));
-        }
         if (JOptionPane.showConfirmDialog(null, panel, "Crear cuenta", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) {
             return false;
         }
@@ -142,7 +132,7 @@ public class Interfaz {
     }
 
     // Conecta con el servidor (y crea la cuenta si se ha pedido) con una ventana de espera
-    private void acceder(boolean registrar, boolean conGoogle, String usuario, char[] contrasena) {
+    private void acceder(boolean registrar, String usuario, char[] contrasena) {
         Path confianza = Path.of(System.getProperty("cys.confianza", "cliente_confianza.p12"));
         if (!Files.isRegularFile(confianza)) {
             JOptionPane.showMessageDialog(null, "No se encuentra el certificado del servidor (" + confianza.toAbsolutePath()
@@ -160,23 +150,11 @@ public class Interfaz {
             protected List<DetalleArchivo> doInBackground() throws Exception {
                 try {
                     nueva[0] = new SesionRemota(new ServicioCifrado(new ClienteServidor(servidor, confianza, claveConfianza())));
-                    CredencialGoogle google = null;
-                    if (conGoogle) {
-                        google = google(texto);
-                    }
                     if (registrar) {
-                        nueva[0].registrar(usuario, contrasena, google);
+                        nueva[0].registrar(usuario, contrasena);
                         cambiarTexto(texto, "Cuenta creada. Entrando...");
                     }
-                    try {
-                        return nueva[0].iniciarSesion(usuario, contrasena, google);
-                    } catch (ErrorServidor e) {
-                        if (!e.requiereGoogle()) {
-                            throw e;
-                        }
-                        // La contraseña es correcta y la cuenta usa Google como segundo factor
-                        return nueva[0].iniciarSesion(usuario, contrasena, google(texto));
-                    }
+                    return nueva[0].iniciarSesion(usuario, contrasena);
                 } finally {
                     Arrays.fill(contrasena, '\0');
                 }
@@ -217,20 +195,6 @@ public class Interfaz {
         }
     }
 
-    // Mejora: inicio de sesión con Google en el navegador (se llama desde el hilo de fondo)
-    private CredencialGoogle google(JLabel texto) throws Exception {
-        ConfiguracionGoogle configuracion = ConfiguracionGoogle.cargar(ConfiguracionGoogle.ruta());
-        if (configuracion == null) {
-            throw new IllegalStateException("El inicio con Google no está configurado en este equipo (falta google_oauth.properties).");
-        }
-        cambiarTexto(texto, "Se ha abierto el navegador: elige tu cuenta de Google...");
-        Consumer<URI> navegador = "http".equals(System.getProperty("cys.google.navegador"))
-                ? InicioGoogle::seguirSinNavegador : InicioGoogle::abrirEnNavegador;
-        CredencialGoogle credencial = new InicioGoogle(configuracion).iniciar(navegador);
-        cambiarTexto(texto, "Cuenta de Google " + credencial.correo() + " comprobada. Entrando...");
-        return credencial;
-    }
-
     private static void cambiarTexto(JLabel etiqueta, String texto) {
         SwingUtilities.invokeLater(() -> etiqueta.setText(texto));
     }
@@ -266,8 +230,7 @@ public class Interfaz {
         anadirBoton(barra, "Compartir...", this::compartir);
         anadirBoton(barra, "Cerrar sesión", this::cerrarSesion);
 
-        String google = sesion.getCorreoGoogle() != null ? "  ·  protegido con Google (" + sesion.getCorreoGoogle() + ")" : "";
-        ventana = new JFrame(TITULO + " - " + sesion.getUsuario() + google);
+        ventana = new JFrame(TITULO + " - " + sesion.getUsuario());
         ventana.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
         ventana.addWindowListener(new WindowAdapter() {
             @Override
@@ -325,8 +288,7 @@ public class Interfaz {
     // 7.4: abrir automáticamente el archivo descifrado
     private void abrir(Path destino) {
         mostrarLista(sesion.listar());
-        boolean puedeAbrir = !"false".equals(System.getProperty("cys.abrir"))
-                && Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN);
+        boolean puedeAbrir = Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN);
         if (puedeAbrir) {
             try {
                 Desktop.getDesktop().open(destino.toFile());
@@ -431,9 +393,9 @@ public class Interfaz {
         if (e instanceof ErrorServidor error) {
             String m = error.getMessage();
             return switch (error.estado()) {
-                case 401 -> m.contains("Google") ? m + "." : enAcceso ? "Usuario o contraseña incorrectos." : "La sesión ha caducado. Vuelve a entrar.";
+                case 401 -> enAcceso ? "Usuario o contraseña incorrectos." : "La sesión ha caducado. Vuelve a entrar.";
                 case 404 -> m.contains("usuario") ? "El usuario destinatario no existe." : "El archivo ya no está en el servidor.";
-                case 409 -> m.contains("Google") ? m + "." : "Ese nombre de usuario ya existe. Elige otro.";
+                case 409 -> "Ese nombre de usuario ya existe. Elige otro.";
                 case 413 -> "El archivo es demasiado grande para el servidor.";
                 default -> m.isBlank() ? "El servidor ha respondido con un error (" + error.estado() + ")." : m + ".";
             };

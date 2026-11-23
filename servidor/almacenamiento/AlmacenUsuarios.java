@@ -5,16 +5,12 @@ import comun.Protocolo;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -35,7 +31,6 @@ public class AlmacenUsuarios {
     private static final String ARCHIVOS = "archivos";
 
     private final Path carpetaUsuarios;
-    private final Path carpetaGoogle;
 
     // Un archivo guardado en la carpeta de un usuario: su id y el contenido de su .meta
     public record ArchivoGuardado(String id, Properties meta) {
@@ -43,7 +38,6 @@ public class AlmacenUsuarios {
 
     public AlmacenUsuarios(Path directorioDatos) throws IOException {
         this.carpetaUsuarios = Files.createDirectories(directorioDatos.resolve("usuarios")).toAbsolutePath().normalize();
-        this.carpetaGoogle = Files.createDirectories(directorioDatos.resolve("google")).toAbsolutePath().normalize();
     }
 
     // ------------------------------------------------------------------ usuarios
@@ -141,25 +135,6 @@ public class AlmacenUsuarios {
         return archivos;
     }
 
-    // ------------------------------------------------------------------ cuentas de Google (mejora)
-
-    // Une una cuenta de Google con un usuario. Se crea un fichero por cuenta de Google con createFile, que
-    // es atómico: una misma cuenta de Google no puede quedar unida a dos usuarios.
-    public boolean vincularGoogle(String sub, String usuario) throws IOException {
-        try {
-            Files.writeString(Files.createFile(rutaGoogle(sub)), usuario, StandardCharsets.UTF_8);
-            return true;
-        } catch (FileAlreadyExistsException e) {
-            return false;
-        }
-    }
-
-    // Usuario unido a una cuenta de Google, o null si no hay ninguno
-    public String usuarioDeGoogle(String sub) throws IOException {
-        Path ruta = rutaGoogle(sub);
-        return Files.isRegularFile(ruta) ? Files.readString(ruta, StandardCharsets.UTF_8).trim() : null;
-    }
-
     // ------------------------------------------------------------------ rutas seguras
 
     // Carpeta del usuario. Se valida el nombre y se comprueba que la ruta final queda dentro de usuarios/,
@@ -182,16 +157,6 @@ public class AlmacenUsuarios {
             throw new IllegalArgumentException("Ruta fuera de la carpeta permitida");
         }
         return ruta;
-    }
-
-    // El identificador de Google (sub) se guarda resumido con SHA-256 para que el nombre del fichero sea seguro
-    private Path rutaGoogle(String sub) {
-        try {
-            byte[] resumen = MessageDigest.getInstance("SHA-256").digest(sub.getBytes(StandardCharsets.UTF_8));
-            return dentroDe(carpetaGoogle, HexFormat.of().formatHex(resumen));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     private static void escribirAtomico(Path destino, String contenido) throws IOException {

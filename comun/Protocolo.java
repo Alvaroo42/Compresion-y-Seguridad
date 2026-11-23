@@ -32,7 +32,6 @@ public final class Protocolo {
     public static final String CABECERA_CLAVE_AES = "ClaveAESCifrada";
     public static final String CABECERA_DESTINATARIO = "Destinatario";
     public static final String CABECERA_FIRMA = "Firma";                    // mejora: firma digital del archivo
-    public static final String CABECERA_REQUIERE_GOOGLE = "Requiere-Google"; // mejora: segundo factor con Google
 
     // ------------------------------------------------------------------ campos de los mensajes
     public static final String CAMPO_USUARIO = "usuario";
@@ -48,9 +47,6 @@ public final class Protocolo {
     public static final String SUFIJO_CLAVE_AES = ".claveAESCifrada";
     public static final String SUFIJO_EMISOR = ".emisor";
     public static final String SUFIJO_FIRMA = ".firma";
-    public static final String CAMPO_ID_TOKEN_GOOGLE = "idTokenGoogle";
-    public static final String CAMPO_NONCE_GOOGLE = "nonceGoogle";
-    public static final String CAMPO_CORREO_GOOGLE = "correoGoogle";
 
     // Parámetros de las URL (?id=... y ?usuario=...)
     public static final String PARAM_ID = "id";

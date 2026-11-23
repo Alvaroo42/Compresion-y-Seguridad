@@ -4,7 +4,7 @@ setlocal
 :: Crea el certificado autofirmado del servidor y el almacen de confianza del cliente con keytool
 :: (viene con Java). Son los tres comandos del apartado 6.1 de la guia (opcion A).
 ::
-::   GenerarCertificado.bat                     valido solo para localhost y 127.0.0.1 (mismo PC)
+::   GenerarCertificado.bat                     valido solo para localhost y 10.163.179.48 (mismo PC)
 ::   GenerarCertificado.bat 10.163.179.48       anade la IP del PC servidor (para clientes en otros PC)
 ::   GenerarCertificado.bat 10.0.0.5 miservidor varias IP o nombres, separados por espacios
 :: Funciona igual desde cmd, PowerShell o doble clic (sin argumentos).
@@ -18,14 +18,14 @@ setlocal
 ::   cliente_confianza.p12            lo unico en lo que confia el cliente: se copia junto a cada cliente
 cd /d "%~dp0.."
 
-set "SAN=dns:localhost,ip:127.0.0.1"
+set "SAN=dns:localhost,ip:10.163.179.48"
 :argumentos
 if "%~1"=="" goto fin_argumentos
 set "ARG=%~1"
 if /i "%ARG%"=="dns:localhost" goto siguiente
-if /i "%ARG%"=="ip:127.0.0.1" goto siguiente
+if /i "%ARG%"=="ip:10.163.179.48" goto siguiente
 if /i "%ARG%"=="localhost" goto siguiente
-if /i "%ARG%"=="127.0.0.1" goto siguiente
+if /i "%ARG%"=="10.163.179.48" goto siguiente
 if /i "%ARG:~0,3%"=="ip:" (set "SAN=%SAN%,%ARG%" & goto siguiente)
 if /i "%ARG:~0,4%"=="dns:" (set "SAN=%SAN%,%ARG%" & goto siguiente)
 echo %ARG%| findstr /r "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul

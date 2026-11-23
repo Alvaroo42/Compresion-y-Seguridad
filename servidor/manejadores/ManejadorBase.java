@@ -44,9 +44,6 @@ public abstract class ManejadorBase implements HttpHandler {
             procesar(ex);
         } catch (ErrorHttp e) {
             vaciarCuerpo(ex);
-            if (e.cabecera() != null) {
-                ex.getResponseHeaders().set(e.cabecera(), e.valorCabecera());
-            }
             responderTexto(ex, e.estado(), e.getMessage());
         } catch (Exception e) {
             System.err.println("Error interno en " + ex.getRequestURI().getPath() + ": " + e);

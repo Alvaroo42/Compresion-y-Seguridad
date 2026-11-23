@@ -1,6 +1,5 @@
 package cliente.servicio;
 
-import cliente.google.CredencialGoogle;
 import cliente.red.ClienteServidor;
 import cliente.servicio.ServicioCifrado.DatosSesion;
 import cliente.servicio.ServicioCifrado.DetalleArchivo;
@@ -26,26 +25,24 @@ public class SesionRemota implements AutoCloseable {
     private Instant caducidad;
     private PrivateKey clavePrivada;
     private PublicKey clavePublica;
-    private String correoGoogle;
     private final List<DetalleArchivo> archivos = new ArrayList<>();
 
     public SesionRemota(ServicioCifrado servicio) {
         this.servicio = servicio;
     }
 
-    public void registrar(String usuario, char[] contrasena, CredencialGoogle google) throws GeneralSecurityException, IOException {
-        servicio.registrarUsuario(usuario, contrasena, google);
+    public void registrar(String usuario, char[] contrasena) throws GeneralSecurityException, IOException {
+        servicio.registrarUsuario(usuario, contrasena);
     }
 
     // Inicia sesión y devuelve los archivos del usuario (los suyos y los que le han compartido)
-    public List<DetalleArchivo> iniciarSesion(String usuario, char[] contrasena, CredencialGoogle google) throws GeneralSecurityException, IOException {
-        DatosSesion datos = servicio.iniciarSesion(usuario, contrasena, google);
+    public List<DetalleArchivo> iniciarSesion(String usuario, char[] contrasena) throws GeneralSecurityException, IOException {
+        DatosSesion datos = servicio.iniciarSesion(usuario, contrasena);
         this.usuario = usuario;
         this.token = datos.token();
         this.caducidad = datos.caducidad();
         this.clavePrivada = datos.clavePrivada();
         this.clavePublica = datos.clavePublica();
-        this.correoGoogle = datos.correoGoogle();
         archivos.clear();
         archivos.addAll(datos.archivos());
         return listar();
@@ -77,11 +74,6 @@ public class SesionRemota implements AutoCloseable {
         return usuario;
     }
 
-    // Correo de Google si la cuenta está protegida con Google (o null)
-    public String getCorreoGoogle() {
-        return correoGoogle;
-    }
-
     // 7.6 Cerrar sesión: se borran de memoria el token y las claves
     @Override
     public void close() {
@@ -89,7 +81,6 @@ public class SesionRemota implements AutoCloseable {
         caducidad = null;
         clavePrivada = null;
         clavePublica = null;
-        correoGoogle = null;
         archivos.clear();
     }
 
@@ -99,7 +90,7 @@ public class SesionRemota implements AutoCloseable {
         }
         // El servidor da tokens de 30 minutos: si ya ha caducado no tiene sentido empezar una subida
         if (Instant.now().isAfter(caducidad)) {
-            throw new ClienteServidor.ErrorServidor(401, "La sesión ha caducado", false);
+            throw new ClienteServidor.ErrorServidor(401, "La sesión ha caducado");
         }
     }
 }
