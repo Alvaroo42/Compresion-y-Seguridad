@@ -32,18 +32,17 @@ los guarda en la carpeta del usuario y los devuelve. Contraseña y clave de dato
 | `cliente/criptografia/FirmaDigital.java` | mejora | firma SHA3-256withRSA de cada archivo |
 | `servidor/ServidorHTTPS.java` | nuevo | HttpsServer, TLS 1.3, carga servidor.p12 y la pimienta |
 | `servidor/manejadores/Manejador*.java` | nuevo | /REGISTRO /LOGIN /SUBIR /BAJAR /CLAVE_PUBLICA |
-| `servidor/seguridad/HashClaveLogin.java` | nuevo | Argon2id + salt + pimienta (Bouncy Castle) |
+| `servidor/seguridad/HashClaveLogin.java` | nuevo | PBKDF2-HMAC-SHA256 + salt + pimienta (incluido en Java) |
 | `servidor/seguridad/GestorTokens.java` | nuevo | tokens de sesión de 30 min |
 | `servidor/almacenamiento/AlmacenUsuarios.java` | nuevo | carpetas por usuario, perfil.properties, .cif y .meta |
 | `comun/Protocolo.java` | nuevo | endpoints, cabeceras, campos y validación del usuario |
-| `lib/bcprov.jar` | nuevo | Bouncy Castle 1.78.1 (solo el servidor, para Argon2id) |
 | `cliente/almacenamiento/GestorFicheros.java`, `SesionLocal.java` | borrado | su lógica pasa a `AlmacenUsuarios` y `SesionRemota` |
 
 ## Modelo criptográfico (notación del profesor)
 
 - Contraseña p_u → H = SHA3-256(salt_u ‖ p_u), salt_u = SHA3-256("CyS-v2|" ‖ u)[0..15] (determinista).
 - Clave de datos = H[0..15]: k_u* = E^{AES-GCM}_{H[0..15]}(k_u). **Nunca sale del cliente.**
-- Clave de login = H[16..31]: el servidor guarda Argon2id(H[16..31], salt aleatorio, pimienta; 19456 KiB, 2, 1).
+- Clave de login = H[16..31]: el servidor guarda PBKDF2-HMAC-SHA256(HMAC-SHA256(pimienta, H[16..31]), salt aleatorio, 600 000 iteraciones).
 - Archivo f: k_f aleatoria, c = Base64(IV ‖ E^{AES-CTR}_{k_f}(f)), k_f* = E^{RSA}_{K_u}(k_f).
 - Compartir con v: k_f' = E^{RSA}_{K_v}(D^{RSA}_{k_u}(k_f*)). El archivo no se vuelve a cifrar.
 - Mejora, firma: σ = S^{SHA3-256withRSA}_{k_emisor}("CyS-v2|firma|" ‖ k_f* ‖ nombre cifrado ‖ c).
@@ -72,7 +71,7 @@ Token: 32 bytes de SecureRandom en Base64-URL, `Authorization: Bearer <token>`, 
 | Certificado con keytool, documentado | `GenerarCertificado.bat` |
 | SHA3 partido: datos / login | `DerivadorClaveContrasena` |
 | Clave de login ≠ clave de datos | `DerivadorClaveContrasena` |
-| Argon2id con salt, parámetros y pimienta | `HashClaveLogin`, `ManejadorRegistro` |
+| Hash lento (PBKDF2) con salt, parámetros y pimienta | `HashClaveLogin`, `ManejadorRegistro` |
 | Privada subida cifrada con la clave de datos | `ProtectorClavePrivada` |
 | /REGISTRO, /LOGIN, /SUBIR, /BAJAR, /CLAVE_PUBLICA | `servidor/manejadores` |
 | Al entrar se recuperan los archivos | `ManejadorLogin`, `SesionRemota` |
@@ -98,19 +97,22 @@ Token: 32 bytes de SecureRandom en Base64-URL, `Authorization: Bearer <token>`, 
   el certificado público del servidor, igual que el `cacerts` de Java usa `changeit`); por defecto `cys-confianza`
   o la variable `CYS_CLAVE_CONFIANZA`.
 - **Login**: el mismo mensaje («Usuario o clave incorrectos») y el mismo tiempo exista o no el usuario.
+- **Hash de la clave de login con PBKDF2-HMAC-SHA256** (600 000 iteraciones, las que recomienda OWASP) en lugar de
+  Argon2id, scrypt o bcrypt: en Java esos tres necesitan una librería externa, y PBKDF2 viene incluido en el JDK.
+  La pimienta se aplica antes como HMAC-SHA256(pimienta, claveLogin). PBKDF2 solo gasta CPU (no memoria), así que
+  es algo más fácil de atacar con tarjetas gráficas que Argon2id; las iteraciones se guardan en el perfil para
+  poder subirlas sin romper los usuarios existentes.
 
 ## Preguntas abiertas para el profesor (de la guía)
 
 1. ¿Basta con un solo SHA3? Un SHA3 sin iteraciones se ataca rápido por fuerza bruta si alguien roba la privada
    cifrada del servidor. Si lo permite, solo cambia `DerivadorClaveContrasena.derivar()` (PBKDF2-HMAC-SHA256,
    600 000 iteraciones, partiendo los 32 bytes igual).
-2. ¿Se puede añadir el jar de Bouncy Castle (`lib/bcprov.jar`)? Si no, `HashClaveLogin` pasa a
-   `PBKDF2WithHmacSHA256` del JDK con la pimienta aplicada antes como HMAC-SHA256(pimienta, claveLogin).
 
 ## Limitaciones conocidas (para el análisis de seguridad)
 
 - Las claves públicas de los demás las da el servidor: un servidor malicioso podría dar una suya al compartir.
   La propia pública sí se comprueba contra la privada. La solución completa son certificados (tema 6).
 - La misma pareja RSA cifra claves y firma (lo correcto sería una pareja para cada cosa).
-- No hay límite de intentos de login (Argon2id lo encarece, pero no lo impide).
+- No hay límite de intentos de login (PBKDF2 lo encarece, pero no lo impide).
 - Al compartir, el servidor guarda una copia del .cif en la carpeta del destinatario; no se puede «descompartir».

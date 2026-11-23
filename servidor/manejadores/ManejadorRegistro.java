@@ -17,7 +17,7 @@ import java.util.Properties;
 
 /**
  * POST /REGISTRO (no protegido). Recibe usuario, claveLogin, clavePublica y clavePrivadaCifrada.
- * Guarda el hash Argon2id de la clave de login (nunca la clave) y las claves tal cual llegan: la privada ya
+ * Guarda el hash PBKDF2 de la clave de login (nunca la clave) y las claves tal cual llegan: la privada ya
  * viene cifrada por el cliente con su clave de datos. 201 si se crea, 409 si el usuario ya existe.
  */
 public class ManejadorRegistro extends ManejadorBase {
@@ -50,9 +50,7 @@ public class ManejadorRegistro extends ManejadorBase {
         Map<String, String> perfil = new LinkedHashMap<>();
         perfil.put("usuario", usuario);
         perfil.put("algoritmo", HashClaveLogin.ALGORITMO);
-        perfil.put("argon2.memoriaKiB", String.valueOf(p.memoriaKiB()));
-        perfil.put("argon2.iteraciones", String.valueOf(p.iteraciones()));
-        perfil.put("argon2.paralelismo", String.valueOf(p.paralelismo()));
+        perfil.put("pbkdf2.iteraciones", String.valueOf(p.iteraciones()));
         perfil.put("salt", b64.encodeToString(salt));
         perfil.put("hashLogin", b64.encodeToString(hash.calcular(claveLogin, salt, p)));
         perfil.put("clavePublica", b64.encodeToString(clavePublica));

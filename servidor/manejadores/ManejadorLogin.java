@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.Properties;
 
 /**
- * POST /LOGIN (no protegido). Recibe usuario y claveLogin. Si el hash Argon2id coincide devuelve el token de
+ * POST /LOGIN (no protegido). Recibe usuario y claveLogin. Si el hash PBKDF2 coincide devuelve el token de
  * sesión, la clave pública, la privada cifrada y la lista de archivos (solo metadatos: el contenido se pide
  * con /BAJAR). Si falla, 401 con un mensaje genérico que no dice si el usuario existe.
  */
@@ -42,9 +42,7 @@ public class ManejadorLogin extends ManejadorBase {
         }
         Base64.Decoder b64 = Base64.getDecoder();
         HashClaveLogin.Parametros p = new HashClaveLogin.Parametros(
-                Integer.parseInt(perfil.getProperty("argon2.memoriaKiB")),
-                Integer.parseInt(perfil.getProperty("argon2.iteraciones")),
-                Integer.parseInt(perfil.getProperty("argon2.paralelismo")));
+                Integer.parseInt(perfil.getProperty("pbkdf2.iteraciones")));
         if (!HashClaveLogin.ALGORITMO.equals(perfil.getProperty("algoritmo"))
                 || !hash.verificar(claveLogin, b64.decode(perfil.getProperty("salt")), p, b64.decode(perfil.getProperty("hashLogin")))) {
             throw new ErrorHttp(401, MENSAJE_INCORRECTO);

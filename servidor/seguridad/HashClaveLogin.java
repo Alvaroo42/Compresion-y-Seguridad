@@ -1,34 +1,39 @@
 package servidor.seguridad;
 
-import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
-import org.bouncycastle.crypto.params.Argon2Parameters;
-
+import javax.crypto.Mac;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Base64;
 
 /**
- * El servidor recibe la clave de login (16 bytes) y la vuelve a resumir con Argon2id, un algoritmo lento a
+ * El servidor recibe la clave de login (16 bytes) y la vuelve a resumir con PBKDF2, un algoritmo lento a
  * propósito: si alguien roba la carpeta de datos, no puede usar los hashes para entrar y probar contraseñas
  * le sale muy caro.
- *   hashLogin = Argon2id(claveLogin, salt, pimienta; memoria, iteraciones, paralelismo)
+ *   hashLogin = PBKDF2-HMAC-SHA256(HMAC-SHA256(pimienta, claveLogin), salt, iteraciones)
+ * - pimienta: secreto de 32 bytes común a todo el servidor, guardado FUERA de servidor_datos. Se aplica antes
+ *   con HMAC-SHA256: sin ella, los hashes robados no sirven para nada.
  * - salt: 16 bytes aleatorios por usuario, guardados en su perfil.
- * - pimienta: secreto de 32 bytes común a todo el servidor, guardado FUERA de servidor_datos.
- * - parámetros: se guardan junto al hash para poder subirlos más adelante sin romper los usuarios antiguos.
- * Implementación de Bouncy Castle (lib/bcprov.jar): el JDK no incluye Argon2.
+ * - iteraciones: el coste. Se guardan junto al hash para poder subirlas más adelante sin romper los usuarios
+ *   antiguos.
+ * Todo viene incluido en Java (PBKDF2WithHmacSHA256 y HmacSHA256): no hace falta ninguna librería externa.
  */
 public class HashClaveLogin {
 
-    public static final String ALGORITMO = "argon2id";
+    public static final String ALGORITMO = "pbkdf2-sha256";
     public static final int TAM_SALT = 16;
     public static final int TAM_HASH = 32;
     public static final int TAM_PIMIENTA = 32;
 
-    // Coste de Argon2id. Los recomendados por OWASP: 19 MiB de memoria, 2 iteraciones y paralelismo 1
-    public record Parametros(int memoriaKiB, int iteraciones, int paralelismo) {
+    // Coste de PBKDF2-HMAC-SHA256. El recomendado por OWASP: 600 000 iteraciones
+    public record Parametros(int iteraciones) {
     }
 
-    public static final Parametros RECOMENDADOS = new Parametros(19456, 2, 1);
+    public static final Parametros RECOMENDADOS = new Parametros(600_000);
 
     private static final SecureRandom RANDOM = new SecureRandom();
     private final byte[] pimienta;
@@ -53,21 +58,33 @@ public class HashClaveLogin {
         return pimienta;
     }
 
-    // Argon2id(claveLogin) con el salt del usuario y la pimienta del servidor como "secret" de Argon2
+    // 1) HMAC-SHA256 con la pimienta como clave. 2) PBKDF2 con el salt del usuario.
+    // PBKDF2 de Java recibe la contraseña como char[], así que el resultado del HMAC (bytes) se le pasa en Base64.
     public byte[] calcular(byte[] claveLogin, byte[] salt, Parametros p) {
-        Argon2Parameters parametros = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
-                .withVersion(Argon2Parameters.ARGON2_VERSION_13)
-                .withSalt(salt)
-                .withSecret(pimienta)
-                .withMemoryAsKB(p.memoriaKiB())
-                .withIterations(p.iteraciones())
-                .withParallelism(p.paralelismo())
-                .build();
-        Argon2BytesGenerator generador = new Argon2BytesGenerator();
-        generador.init(parametros);
-        byte[] hash = new byte[TAM_HASH];
-        generador.generateBytes(claveLogin, hash);
-        return hash;
+        byte[] conPimienta = null;
+        char[] entrada = null;
+        PBEKeySpec spec = null;
+        try {
+            Mac hmac = Mac.getInstance("HmacSHA256");
+            hmac.init(new SecretKeySpec(pimienta, "HmacSHA256"));
+            conPimienta = hmac.doFinal(claveLogin);
+            entrada = Base64.getEncoder().encodeToString(conPimienta).toCharArray();
+
+            spec = new PBEKeySpec(entrada, salt, p.iteraciones(), TAM_HASH * 8);
+            return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("No se ha podido calcular el hash de la clave de login", e);
+        } finally {
+            if (conPimienta != null) {
+                Arrays.fill(conPimienta, (byte) 0);
+            }
+            if (entrada != null) {
+                Arrays.fill(entrada, '\0');
+            }
+            if (spec != null) {
+                spec.clearPassword();
+            }
+        }
     }
 
     // Repite el cálculo con el salt y los parámetros guardados y compara con MessageDigest.isEqual,

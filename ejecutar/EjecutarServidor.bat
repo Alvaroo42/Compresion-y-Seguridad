@@ -12,11 +12,11 @@ if not exist servidor_secretos\servidor.p12 (
 )
 
 echo Compilando el servidor...
-javac -encoding UTF-8 -cp lib\bcprov.jar -sourcepath . -d out servidor\ServidorHTTPS.java
+javac -encoding UTF-8 -sourcepath . -d out servidor\ServidorHTTPS.java
 if errorlevel 1 (
   echo ERROR al compilar el servidor.
   pause
   exit /b 1
 )
-java -Dfile.encoding=UTF-8 -cp "out;lib\bcprov.jar" servidor.ServidorHTTPS %*
+java -Dfile.encoding=UTF-8 -cp out servidor.ServidorHTTPS %*
 pause

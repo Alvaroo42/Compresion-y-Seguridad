@@ -4,7 +4,7 @@ setlocal
 :: Compila y abre el cliente. Necesita cliente_confianza.p12 en la carpeta del proyecto.
 ::   EjecutarCliente.bat                      servidor localhost:8443 (se puede cambiar en la ventana)
 ::   EjecutarCliente.bat 192.168.1.20:8443    otro servidor
-:: El cliente no necesita Bouncy Castle: SHA3, AES, RSA y TLS vienen en Java.
+:: No necesita librerias externas: SHA3, AES, RSA y TLS vienen en Java.
 cd /d "%~dp0.."
 
 echo Compilando el cliente...
