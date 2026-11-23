@@ -4,8 +4,10 @@ setlocal
 :: Crea el certificado autofirmado del servidor y el almacen de confianza del cliente con keytool
 :: (viene con Java). Son los tres comandos del apartado 6.1 de la guia (opcion A).
 ::
-::   GenerarCertificado.bat                                     valido para localhost y 127.0.0.1
-::   GenerarCertificado.bat "dns:localhost,ip:192.168.1.20"     anade la IP del PC servidor (entre comillas)
+::   GenerarCertificado.bat                     valido solo para localhost y 127.0.0.1 (mismo PC)
+::   GenerarCertificado.bat 10.163.179.48       anade la IP del PC servidor (para clientes en otros PC)
+::   GenerarCertificado.bat 10.0.0.5 miservidor varias IP o nombres, separados por espacios
+:: Funciona igual desde cmd, PowerShell o doble clic (sin argumentos).
 ::
 :: La contrasena del almacen del servidor la pide keytool (o se toma de la variable CYS_CLAVE_ALMACEN).
 :: No se guarda en ningun fichero del proyecto.
@@ -16,8 +18,22 @@ setlocal
 ::   cliente_confianza.p12            lo unico en lo que confia el cliente: se copia junto a cada cliente
 cd /d "%~dp0.."
 
-set "SAN=%~1"
-if "%SAN%"=="" set "SAN=dns:localhost,ip:127.0.0.1"
+set "SAN=dns:localhost,ip:127.0.0.1"
+:argumentos
+if "%~1"=="" goto fin_argumentos
+set "ARG=%~1"
+if /i "%ARG%"=="dns:localhost" goto siguiente
+if /i "%ARG%"=="ip:127.0.0.1" goto siguiente
+if /i "%ARG%"=="localhost" goto siguiente
+if /i "%ARG%"=="127.0.0.1" goto siguiente
+if /i "%ARG:~0,3%"=="ip:" (set "SAN=%SAN%,%ARG%" & goto siguiente)
+if /i "%ARG:~0,4%"=="dns:" (set "SAN=%SAN%,%ARG%" & goto siguiente)
+echo %ARG%| findstr /r "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul
+if errorlevel 1 (set "SAN=%SAN%,dns:%ARG%") else (set "SAN=%SAN%,ip:%ARG%")
+:siguiente
+shift
+goto argumentos
+:fin_argumentos
 set "CLAVE_ALMACEN=-storepass:env CYS_CLAVE_ALMACEN"
 if not defined CYS_CLAVE_ALMACEN set "CLAVE_ALMACEN="
 if not defined CYS_CLAVE_CONFIANZA set "CYS_CLAVE_CONFIANZA=cys-confianza"
@@ -46,7 +62,8 @@ keytool -importcert -alias servidor -file servidor_secretos\servidor.crt -noprom
 if errorlevel 1 goto error
 
 echo.
-echo Certificado creado. Huella SHA-256 (comparala con la que veas en cada cliente):
+echo Certificado creado para: %SAN%
+echo Huella SHA-256 (comparala con la que veas en cada cliente):
 keytool -printcert -file servidor_secretos\servidor.crt | findstr /C:"SHA256:"
 echo.
 echo Copia cliente_confianza.p12 a la carpeta del proyecto de cada equipo cliente.

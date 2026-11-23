@@ -10,8 +10,9 @@ los guarda en la carpeta del usuario y los devuelve. Contraseña y clave de dato
 ## Cómo arrancarlo (Windows, Java 17 o superior)
 
 1. `ejecutar\GenerarCertificado.bat` — una vez. keytool pide una contraseña para el almacén del servidor.
-   Si el servidor va en otro PC: `GenerarCertificado.bat "dns:localhost,ip:127.0.0.1,ip:192.168.1.20"`
-   y copiar `cliente_confianza.p12` a la carpeta del proyecto de cada cliente.
+   Si los clientes van en otros PC, pasarle la IP del PC servidor (la «Dirección IPv4» de `ipconfig`):
+   `GenerarCertificado.bat 10.163.179.48`, y copiar `cliente_confianza.p12` a la carpeta del proyecto de
+   cada cliente. Si la IP cambia (otra red), hay que repetirlo.
 2. `ejecutar\EjecutarServidor.bat` — pide la contraseña del almacén y escucha en el puerto 8443.
 3. `ejecutar\EjecutarCliente.bat` — una vez por cada usuario que se quiera abrir a la vez.
 4. `ejecutar\EjecutarPruebas.bat` — pruebas automáticas (ver más abajo).
